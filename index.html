@@ -10,17 +10,51 @@
     <div class="container">
         <h1>SQLD 기출문제 학습</h1>
         
-        <div id="quiz-section" class="section">
-            <div class="header">
-                <div class="info">
-                    <span id="progress-info">진행 상황: <span id="answered-count">0</span>/<span id="total-count">0</span></span>
-                    <span id="score-info">정답률: <span id="correct-count">0</span>/<span id="answered-count2">0</span></span>
-                </div>
+        <div class="header">
+            <div class="info">
+                <span id="progress-info">진행 상황: <span id="answered-count">0</span>/<span id="total-count">0</span></span>
+                <span id="score-info">정답률: <span id="correct-count">0</span>/<span id="answered-count2">0</span></span>
             </div>
+        </div>
 
-            <div id="question-list" class="question-list"></div>
+        <div id="question-list" class="question-list">
+            <!-- 문제들이 여기에 동적으로 추가됩니다 -->
         </div>
     </div>
+
+    <!-- 문제 템플릿 -->
+    <template id="question-template">
+        <div class="question-item">
+            <div class="question-header">
+                <h3>문제 {number}</h3>
+                <span class="result"></span>
+            </div>
+            <div class="question-content">
+                <p class="question-text"></p>
+                <div class="options">
+                    <label>
+                        <input type="radio" name="q{number}" value="1">
+                        <span class="option-text"></span>
+                    </label>
+                    <label>
+                        <input type="radio" name="q{number}" value="2">
+                        <span class="option-text"></span>
+                    </label>
+                    <label>
+                        <input type="radio" name="q{number}" value="3">
+                        <span class="option-text"></span>
+                    </label>
+                    <label>
+                        <input type="radio" name="q{number}" value="4">
+                        <span class="option-text"></span>
+                    </label>
+                </div>
+                <button class="check-answer">정답 확인</button>
+                <div class="explanation"></div>
+            </div>
+        </div>
+    </template>
+
     <script src="script.js"></script>
 </body>
 </html> 

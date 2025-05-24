@@ -4,157 +4,227 @@ let currentRound = '';
 let score = 0;
 let selectedAnswer = null;
 
-async function loadMarkdown() {
+// 문제 데이터를 저장할 배열
+let questions = [];
+
+// 진행 상황을 추적할 변수들
+let answeredCount = 0;
+let correctCount = 0;
+
+// 페이지 로드 시 문제 불러오기
+window.addEventListener('DOMContentLoaded', loadQuestions);
+
+// 마크다운 파일을 불러오고 파싱하는 함수
+async function loadQuestions() {
     try {
         const response = await fetch('note.md');
         const text = await response.text();
-        return text;
+        questions = parseQuestions(text);
+        renderQuestions();
+        updateProgress();
     } catch (error) {
-        console.error('마크다운 파일을 불러오는데 실패했습니다:', error);
-        return null;
+        console.error('문제를 불러오는데 실패했습니다:', error);
     }
 }
 
-function parseMarkdown(markdown) {
-    const questions = [];
+// 마크다운 텍스트를 파싱하여 문제 객체로 변환하는 함수
+function parseQuestions(markdown) {
     const sections = markdown.split('### 문제');
+    const parsedQuestions = [];
     
     sections.slice(1).forEach((section, index) => {
         const lines = section.trim().split('\n');
+        const questionNumber = index + 1;
+        
+        // 문제 텍스트 추출
         let questionText = '';
-        let answer = '';
+        let options = [];
+        let correctAnswer = '';
         let explanation = '';
         
-        // 문제 내용 추출
-        let currentBlock = [];
-        let isCodeBlock = false;
         let isQuestionContent = true;
+        let isExplanation = false;
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             
             if (line.startsWith('정답:')) {
                 isQuestionContent = false;
-                answer = line.replace('정답:', '').trim();
+                const answerText = line.replace('정답:', '').trim();
+                correctAnswer = parseAnswer(answerText);
                 continue;
             }
             
             if (line.startsWith('해설:')) {
                 isQuestionContent = false;
-                // 해설 다음 줄부터 다음 문제 시작 전까지가 해설 내용
-                let j = i + 1;
-                while (j < lines.length && !lines[j].trim().startsWith('---')) {
-                    explanation += lines[j] + '\n';
-                    j++;
-                }
-                explanation = explanation.trim();
-                break;
+                isExplanation = true;
+                continue;
             }
             
-            if (isQuestionContent && line !== '---') {
-                if (line.startsWith('```')) {
-                    isCodeBlock = !isCodeBlock;
-                    if (isCodeBlock) {
-                        currentBlock.push('<pre><code>');
-                    } else {
-                        currentBlock.push('</code></pre>');
-                    }
-                } else if (line.startsWith('|')) {
-                    // 테이블 처리
-                    currentBlock.push(line);
-                } else {
-                    if (line) currentBlock.push(line);
+            if (isExplanation && line && !line.startsWith('---')) {
+                explanation += line + '\n';
+                continue;
+            }
+            
+            if (isQuestionContent && line) {
+                if (line.match(/^\d\)/)) {
+                    // 번호가 있는 보기
+                    options.push(line.substring(line.indexOf(')') + 1).trim());
+                } else if (!line.startsWith('---')) {
+                    questionText += line + '\n';
                 }
             }
         }
         
-        questionText = currentBlock.join('\n').trim();
-        
-        if (questionText || answer) {
-            questions.push({
-                id: index + 1,
-                question: questionText || '문제 내용이 없습니다.',
-                answer: answer || '정답이 없습니다.',
-                explanation: explanation || '',
-                isAnswered: false,
-                isCorrect: false
-            });
+        // 보기가 없는 경우 임시 보기 생성
+        if (options.length === 0) {
+            options = [
+                '보기 1',
+                '보기 2',
+                '보기 3',
+                '보기 4'
+            ];
         }
+        
+        parsedQuestions.push({
+            number: questionNumber,
+            text: questionText.trim(),
+            options: options.slice(0, 4), // 최대 4개의 보기만 사용
+            correctAnswer: correctAnswer || '1', // 기본값 1로 설정
+            explanation: explanation.trim(),
+            answered: false,
+            isCorrect: false
+        });
     });
     
-    return questions;
+    return parsedQuestions;
 }
 
-function createQuestionElement(question) {
-    const div = document.createElement('div');
-    div.className = 'question-item';
-    div.id = `question-${question.id}`;
+// 답안 텍스트를 숫자로 변환하는 함수
+function parseAnswer(answerText) {
+    const match = answerText.match(/\d+/);
+    return match ? match[0] : '1';
+}
+
+// 표 형식의 보기를 파싱하는 함수
+function parseTableOptions(tableRow) {
+    return tableRow
+        .split('|')
+        .filter(cell => cell.trim())
+        .map(cell => cell.trim());
+}
+
+// 문제를 화면에 렌더링하는 함수
+function renderQuestions() {
+    const questionList = document.getElementById('question-list');
+    const template = document.getElementById('question-template');
     
-    let questionContent = question.question;
-    
-    // 테이블 변환
-    if (questionContent.includes('|')) {
-        const lines = questionContent.split('\n');
-        const tableLines = lines.filter(line => line.trim().startsWith('|'));
-        if (tableLines.length > 0) {
-            const tableHtml = `<table>${
-                tableLines.map(line => {
-                    const cells = line.split('|').filter(cell => cell.trim());
-                    return `<tr>${cells.map(cell => `<td>${cell.trim()}</td>`).join('')}</tr>`;
-                }).join('')
-            }</table>`;
-            questionContent = questionContent.replace(tableLines.join('\n'), tableHtml);
+    questions.forEach(question => {
+        const questionElement = template.content.cloneNode(true);
+        
+        // 문제 번호와 텍스트 설정
+        questionElement.querySelector('h3').textContent = `문제 ${question.number}`;
+        questionElement.querySelector('.question-text').textContent = question.text;
+        
+        // 보기 설정
+        const optionInputs = questionElement.querySelectorAll('input[type="radio"]');
+        const optionTexts = questionElement.querySelectorAll('.option-text');
+        
+        optionInputs.forEach((input, index) => {
+            input.name = `q${question.number}`;
+            input.value = (index + 1).toString();
+        });
+        
+        optionTexts.forEach((span, index) => {
+            span.textContent = question.options[index] || `보기 ${index + 1}`;
+        });
+        
+        // 정답 확인 버튼 이벤트 설정
+        const checkButton = questionElement.querySelector('.check-answer');
+        checkButton.addEventListener('click', () => checkAnswer(question.number));
+        
+        // 해설 설정
+        const explanation = questionElement.querySelector('.explanation');
+        console.log("question.explanation : ", question.explanation);
+        if (question.explanation && question.explanation.trim()) {
+            explanation.textContent = question.explanation;
+            console.log("explanation.textContent : ", explanation.textContent);
+        } else {
+            explanation.textContent = '해설이 없습니다.';
         }
-    }
-    
-    div.innerHTML = `
-        <div class="question-header">
-            <span class="question-number">문제 ${question.id}</span>
-        </div>
-        <div class="question-content">${questionContent}</div>
-        <div class="answer-section">
-            <input type="text" class="answer-input" placeholder="답을 입력하세요">
-            <button class="check-answer-btn" onclick="checkAnswer(${question.id})">정답 확인</button>
-        </div>
-        <div class="result"></div>
-        <div class="explanation">${question.explanation || ''}</div>
-    `;
-    
-    return div;
+        
+        questionList.appendChild(questionElement);
+    });
 }
 
-function checkAnswer(questionId) {
-    const questionDiv = document.getElementById(`question-${questionId}`);
-    const input = questionDiv.querySelector('.answer-input');
-    const resultDiv = questionDiv.querySelector('.result');
-    const explanationDiv = questionDiv.querySelector('.explanation');
-    const question = currentQuestions.find(q => q.id === questionId);
+// 답안을 체크하는 함수
+function checkAnswer(questionNumber) {
+    const question = questions[questionNumber - 1];
+    const selectedOption = document.querySelector(`input[name="q${questionNumber}"]:checked`);
+    const questionElement = document.querySelector(`.question-item:nth-child(${questionNumber})`);
+    const result = questionElement.querySelector('.result');
+    const explanation = questionElement.querySelector('.explanation');
     
-    if (!question) return;
-    
-    const userAnswer = input.value.trim();
-    const isCorrect = question.answer.toLowerCase().includes(userAnswer.toLowerCase());
-    
-    resultDiv.textContent = isCorrect ? '정답입니다!' : '틀렸습니다.';
-    resultDiv.textContent += ` (정답: ${question.answer})`;
-    resultDiv.className = `result ${isCorrect ? 'correct' : 'incorrect'}`;
-    resultDiv.style.display = 'block';
-    
-    if (question.explanation) {
-        explanationDiv.style.display = 'block';
+    if (!selectedOption) {
+        alert('답을 선택해주세요.');
+        return;
     }
     
-    if (!question.isAnswered) {
-        question.isAnswered = true;
+    if (!question.answered) {
+        question.answered = true;
+        answeredCount++;
+        
+        const isCorrect = selectedOption.value === question.correctAnswer;
         question.isCorrect = isCorrect;
-        updateScore();
+        
+        if (isCorrect) {
+            correctCount++;
+            result.textContent = '정답!';
+            result.className = 'result correct';
+        } else {
+            result.textContent = '오답';
+            result.className = 'result incorrect';
+        }
+        
+        // 정답 표시
+        const options = questionElement.querySelectorAll('.options label');
+        options.forEach((label, index) => {
+            if ((index + 1).toString() === question.correctAnswer) {
+                label.classList.add('correct-option');
+            } else if ((index + 1).toString() === selectedOption.value) {
+                label.classList.add('incorrect-option');
+            }
+        });
+        
+        // 해설 표시
+        explanation.classList.remove('hidden');
+        explanation.classList.add('show');  // show 클래스 추가
+        
+        // 진행 상황 업데이트
+        updateProgress();
+        
+        // 선택 비활성화
+        const optionInputs = questionElement.querySelectorAll('input[type="radio"]');
+        optionInputs.forEach(input => input.disabled = true);
+        
+        // 버튼 비활성화
+        const checkButton = questionElement.querySelector('.check-answer');
+        checkButton.disabled = true;
     }
+}
+
+// 진행 상황을 업데이트하는 함수
+function updateProgress() {
+    document.getElementById('answered-count').textContent = answeredCount;
+    document.getElementById('answered-count2').textContent = answeredCount;
+    document.getElementById('total-count').textContent = questions.length;
+    document.getElementById('correct-count').textContent = correctCount;
 }
 
 function updateScore() {
-    const total = currentQuestions.length;
-    const answered = currentQuestions.filter(q => q.isAnswered).length;
-    const correct = currentQuestions.filter(q => q.isCorrect).length;
+    const total = questions.length;
+    const answered = questions.filter(q => q.answered).length;
+    const correct = questions.filter(q => q.isCorrect).length;
     
     document.getElementById('answered-count').textContent = answered;
     document.getElementById('total-count').textContent = total;
@@ -162,29 +232,11 @@ function updateScore() {
     document.getElementById('answered-count2').textContent = answered;
 }
 
-let questions = [];
-
-async function init() {
-    const markdown = await loadMarkdown();
-    if (!markdown) return;
-    
-    currentQuestions = parseMarkdown(markdown);
-    const questionList = document.getElementById('question-list');
-    
-    currentQuestions.forEach(question => {
-        questionList.appendChild(createQuestionElement(question));
-    });
-    
-    updateScore();
-}
-
-init();
-
 function updateQuestion() {
     const question = currentQuestions[currentQuestionIndex];
     document.getElementById('question-number').textContent = `${currentQuestionIndex + 1}/${currentQuestions.length}`;
     document.getElementById('score').textContent = `점수: ${score}`;
-    document.getElementById('question-content').textContent = question.question;
+    document.getElementById('question-content').textContent = question.text;
     document.getElementById('result').classList.add('hidden');
     document.getElementById('submit-btn').disabled = false;
     selectedAnswer = null;
@@ -216,4 +268,7 @@ function nextQuestion() {
 function showRoundSelection() {
     document.getElementById('quiz-section').classList.add('hidden');
     document.getElementById('round-selection').classList.remove('hidden');
-} 
+}
+
+// 페이지 로드 시 문제 불러오기
+loadQuestions(); 
