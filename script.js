@@ -20,6 +20,7 @@ async function loadQuestions() {
         const response = await fetch('note.md');
         const text = await response.text();
         questions = parseQuestions(text);
+        console.log("questions : ", questions);
         renderQuestions();
         updateProgress();
     } catch (error) {
@@ -32,9 +33,15 @@ function parseQuestions(markdown) {
     const sections = markdown.split('### 문제');
     const parsedQuestions = [];
     
-    sections.slice(1).forEach((section, index) => {
+    sections.slice(1).forEach((section) => {
         const lines = section.trim().split('\n');
-        const questionNumber = index + 1;
+        
+        // 문제 번호 추출 (첫 번째 줄에서 숫자만 추출)
+        const questionNumber = parseInt(lines[0].trim());
+        if (isNaN(questionNumber)) {
+            console.error('문제 번호를 찾을 수 없습니다:', lines[0]);
+            return;
+        }
         
         // 문제 텍스트 추출
         let questionText = '';
@@ -45,7 +52,7 @@ function parseQuestions(markdown) {
         let isQuestionContent = true;
         let isExplanation = false;
         
-        for (let i = 0; i < lines.length; i++) {
+        for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             
             if (line.startsWith('정답:')) {
@@ -96,6 +103,9 @@ function parseQuestions(markdown) {
             isCorrect: false
         });
     });
+    
+    // 문제 번호 순으로 정렬
+    parsedQuestions.sort((a, b) => a.number - b.number);
     
     return parsedQuestions;
 }
@@ -159,9 +169,14 @@ function renderQuestions() {
 
 // 답안을 체크하는 함수
 function checkAnswer(questionNumber) {
-    const question = questions[questionNumber - 1];
+    const question = questions.find(q => q.number === questionNumber);
+    if (!question) {
+        console.error('문제를 찾을 수 없습니다:', questionNumber);
+        return;
+    }
+    
     const selectedOption = document.querySelector(`input[name="q${questionNumber}"]:checked`);
-    const questionElement = document.querySelector(`.question-item:nth-child(${questionNumber})`);
+    const questionElement = document.querySelector(`.question-item:nth-child(${questions.indexOf(question) + 1})`);
     const result = questionElement.querySelector('.result');
     const explanation = questionElement.querySelector('.explanation');
     
@@ -269,6 +284,3 @@ function showRoundSelection() {
     document.getElementById('quiz-section').classList.add('hidden');
     document.getElementById('round-selection').classList.remove('hidden');
 }
-
-// 페이지 로드 시 문제 불러오기
-loadQuestions(); 
