@@ -20,7 +20,6 @@ async function loadQuestions() {
         const response = await fetch('note.md');
         const text = await response.text();
         questions = parseQuestions(text);
-        console.log("questions : ", questions);
         renderQuestions();
         updateProgress();
     } catch (error) {
@@ -51,12 +50,14 @@ function parseQuestions(markdown) {
         
         let isQuestionContent = true;
         let isExplanation = false;
+        let isOptions = false;
         
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             
             if (line.startsWith('정답:')) {
                 isQuestionContent = false;
+                isOptions = false;
                 const answerText = line.replace('정답:', '').trim();
                 correctAnswer = parseAnswer(answerText);
                 continue;
@@ -64,22 +65,28 @@ function parseQuestions(markdown) {
             
             if (line.startsWith('해설:')) {
                 isQuestionContent = false;
+                isOptions = false;
                 isExplanation = true;
+                // '해설:' 텍스트를 제거하고 내용만 추가
+                explanation += line.replace('해설:', '').trim() + '\n';
                 continue;
             }
             
-            if (isExplanation && line && !line.startsWith('---')) {
+            if (line.match(/^\d\)/)) {
+                isQuestionContent = false;
+                isOptions = true;
+            }
+            
+            if (line.startsWith('---')) {
+                break;
+            }
+            
+            if (isExplanation && line) {
                 explanation += line + '\n';
-                continue;
-            }
-            
-            if (isQuestionContent && line) {
-                if (line.match(/^\d\)/)) {
-                    // 번호가 있는 보기
-                    options.push(line.substring(line.indexOf(')') + 1).trim());
-                } else if (!line.startsWith('---')) {
-                    questionText += line + '\n';
-                }
+            } else if (isOptions && line.match(/^\d\)/)) {
+                options.push(line.substring(line.indexOf(')') + 1).trim());
+            } else if (isQuestionContent && line) {
+                questionText += line + '\n';
             }
         }
         
@@ -155,13 +162,17 @@ function renderQuestions() {
         
         // 해설 설정
         const explanation = questionElement.querySelector('.explanation');
+        
         console.log("question.explanation : ", question.explanation);
-        if (question.explanation && question.explanation.trim()) {
-            explanation.textContent = question.explanation;
+
+        explanation.textContent = question.explanation;
             console.log("explanation.textContent : ", explanation.textContent);
-        } else {
-            explanation.textContent = '해설이 없습니다.';
-        }
+        // if (question.explanation && question.explanation.trim()) {
+        //     explanation.textContent = question.explanation;
+        //     console.log("explanation.textContent : ", explanation.textContent);
+        // } else {
+        //     explanation.textContent = '해설이 없습니다.';
+        // }
         
         questionList.appendChild(questionElement);
     });
@@ -179,6 +190,7 @@ function checkAnswer(questionNumber) {
     const questionElement = document.querySelector(`.question-item:nth-child(${questions.indexOf(question) + 1})`);
     const result = questionElement.querySelector('.result');
     const explanation = questionElement.querySelector('.explanation');
+    // console.log("explanation : ", explanation);
     
     if (!selectedOption) {
         alert('답을 선택해주세요.');
